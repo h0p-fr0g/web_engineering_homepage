@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Topologische Sortierung</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+        }
+        .container {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 5px;
+            max-width: 600px;
+            margin: auto;
+        }
+        h1 {
+            text-align: center;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        textarea {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-family: monospace;
+            resize: vertical;
+            min-height: 100px;
+        }
+        .input-info {
+            font-size: 14px;
+            color: #666;
+            margin-top: -10px;
+            margin-bottom: 15px;
+        }
+        button {
+            background-color: #5cb85c;
+            color: white;
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            width: 100%;
+        }
+        button:hover {
+            background-color: #4cae4c;
+        }
+        .result-box {
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background-color: #e9ecef;
+            min-height: 50px;
+        }
+        .result-box h3 {
+            margin-top: 0;
+        }
+    </style>
+
+    <script>
+
+    class Vorrang {
+
+        constructor(relations) {
+            
+            this.successors = new Map();
+            this.inDegrees = new Map();
+            this.allNodes = new Set();
+            this.edgeCount = relations.length;
+
+            for (const [predecessor, successor] of relations) {
+                this.allNodes.add(predecessor);
+                this.allNodes.add(successor);
+
+                if (!this.successors.has(predecessor)) this.successors.set(predecessor, new Set());
+                if (!this.inDegrees.has(predecessor)) this.inDegrees.set(predecessor, 0);
+                if (!this.inDegrees.has(successor)) this.inDegrees.set(successor, 0);
+
+                this.successors.get(predecessor).add(successor);
+                this.inDegrees.set(successor, this.inDegrees.get(successor) + 1);
+            }
+
+            const self = this;
+
+            this.loggedInDegrees = new Proxy(this.inDegrees, {
+                get: (target, key) => {
+                    if (key === 'set') {
+                        return function(node, newDegree) {
+                            const oldDegree = target.get(node);
+                            
+                            const result = target.set(node, newDegree);
+
+                            if (typeof oldDegree === 'number' && newDegree < oldDegree) {
+                                this.edgeCount--;
+                                console.log(`[Proxy-LOG] Knoten '${node}' wurde dekrementiert. Noch ${self.edgeCount} Vorrangrelation(en) übrig.`);
+                            }
+                            return result;
+                        };
+                    }
+                    
+                    const value = Reflect.get(target, key);
+                    
+                    return (typeof value === 'function') ? value.bind(target) : value;
+                }
+            });
+        }
+
+        *[Symbol.iterator]() {
+
+            const currentInDegrees = this.loggedInDegrees; 
+            const successors = this.successors;
+            const allNodes = this.allNodes;
+
+            const queue = [];
+            for (const node of allNodes) {
+
+                if (currentInDegrees.get(node) === 0 || !currentInDegrees.has(node)) queue.push(node);
+            }
+
+            queue.sort();
+
+            while (queue.length > 0) {
+                const currentNode = queue.shift();
+                yield currentNode;
+
+                const currentSuccessors = successors.get(currentNode);
+                if (currentSuccessors) {
+                    for (const successor of currentSuccessors) {
+                        const newDegree = currentInDegrees.get(successor) - 1;
+                        
+                        currentInDegrees.set(successor, newDegree);
+                        
+                        this.loggedInDegrees.set(successor, newDegree); 
+                        
+                        if (newDegree === 0) queue.push(successor);
+                    }
+                    queue.sort();
+                }
+            }
+        }
+    }
+
+        document.addEventListener('DOMContentLoaded', function() {
+
+            const sortButton = document.getElementById('sortButton');
+            sortButton.addEventListener('click', sortRelations);
+
+            runTests();
+
+        });
+
+
+        function sortRelations() {
+            const inputElement = document.getElementById('relationsInput');
+            const outputElement = document.getElementById('resultOutput');
+            const rawInput = inputElement.value.trim();
+
+            if (!rawInput) {
+                outputElement.innerHTML = '<span style="color: red;">Bitte geben Sie die Vorrang-Relationen ein.</span>';
+                return;
+            }
+
+            const lines = rawInput.split(/[\n,]/)
+                                .map(line => line.trim())
+                                .filter(line => line.length > 0);
+            
+            const relations = [];
+            
+            const relationPattern = /^\s*([\w\säöüÄÖÜß\-\(\)]+)\s*->\s*([\w\säöüÄÖÜß\-\(\)]+)\s*$/i;
+            
+            for (const line of lines) {
+                const match = line.match(relationPattern);
+                
+                if (match) {
+                    relations.push([match[1].trim(), match[2].trim()]);
+                } else {
+                    outputElement.innerHTML = `<span style="color: red; font-weight: bold;">PARSING FEHLER:</span><br>Die Zeile <code>"${line}"</code> konnte nicht als gültige Vorrangrelation (Format: A -> B) erkannt werden.`;
+                    return;
+                }
+            }
+
+            
+            const v = new Vorrang(relations); 
+
+            const result = [];
+            const allNodesCount = v.allNodes.size; 
+            
+            for (const nextActivity of v) {
+                result.push(nextActivity);
+            }
+            
+            // Prüfung auf Zyklus
+            if (result.length < allNodesCount) {
+                outputElement.innerHTML = `<span style="color: red; font-weight: bold;">FEHLER: Die Vorrang-Relationen enthalten einen Zyklus!</span>`;
+            } 
+            else {
+                outputElement.innerHTML = result.join(' → ');
+            }
+        }
+
+        function runTests() {
+            console.log("--- STARTING VORRANG GENERATOR TESTS ---");
+            let passedTests = 0;
+            let totalTests = 0;
+
+            const assertTest = (name, testFunction, expected) => {
+                totalTests++;
+                let actual;
+                try {
+                    actual = testFunction();
+                    const success = JSON.stringify(actual) === JSON.stringify(expected);
+                    if (success) {
+                        console.log(`✅ TEST PASSED: ${name}`);
+                        passedTests++;
+                    } else {
+                        console.error(`❌ TEST FAILED: ${name}`);
+                        console.error(`  Erwartet: ${JSON.stringify(expected)}`);
+                        console.error(`  Erhalten:   ${JSON.stringify(actual)}`);
+                    }
+                } catch (e) {
+                    console.error(`❌ TEST FAILED (Exception): ${name}`, e);
+                }
+            };
+
+            assertTest(
+                "1. TopSort mit Parallelen (Studentenleben)",
+                () => {
+                    const relations = [
+                        ["schlafen", "studieren"],
+                        ["essen", "studieren"],
+                        ["studieren", "prüfen"]
+                    ];
+                    const v = new Vorrang(relations);
+                    return Array.from(v);
+                },
+                ["essen", "schlafen", "studieren", "prüfen"] 
+            );
+
+            
+            assertTest(
+                "2. Sequenzielle Kette (A -> B -> C)",
+                () => {
+                    const relations = [
+                        ["A", "B"],
+                        ["B", "C"],
+                        ["C", "D"]
+                    ];
+                    const v = new Vorrang(relations);
+                    return Array.from(v);
+                },
+                ["A", "B", "C", "D"]
+            );
+
+            assertTest(
+                "3. Konvergierender Graph (Mehrere Quellen)",
+                () => {
+                    const relations = [
+                        ["Task1", "Final"],
+                        ["Task2", "Final"],
+                        ["Start", "Task1"]
+                    ];
+                    const v = new Vorrang(relations);
+                    return Array.from(v); 
+                },
+                ["Start", "Task1", "Task2", "Final"] 
+            );
+
+            assertTest(
+                "4. Zyklus-Erkennung (A -> B -> A)",
+                () => {
+                    const relations = [
+                        ["A", "B"],
+                        ["B", "C"],
+                        ["C", "A"]
+                    ];
+                    const v = new Vorrang(relations);
+                    const result = Array.from(v);
+                    return result.length < v.allNodes.size; 
+                },
+                true
+            );
+            
+            assertTest(
+                "5. Leere Eingabe",
+                () => {
+                    const relations = [];
+                    const v = new Vorrang(relations);
+                    return Array.from(v); 
+                },
+                []
+            );
+
+
+            console.log("---------------------------------------");
+            console.log(`RESULT: ${passedTests} von ${totalTests} Tests erfolgreich.`);
+            console.log("---------------------------------------");
+        }
+
+
+    </script>
+</head>
+<body>
+
+<div class="container">
+    <h1>Topologische Sortierung</h1>
+    
+    <label for="relationsInput">Vorrang-Relationen (z.B. A -> B, B -> C, je eine pro Zeile):</label>
+    <textarea id="relationsInput" placeholder="A -> B&#10;B -> C&#10;D -> A" required></textarea>
+    <div class="input-info">
+        Jede Relation gibt an, welche Aufgabe vor einer anderen erledigt werden muss.
+    </div>
+
+    <button id="sortButton">Topologisch Sortieren</button>
+
+    <hr>
+
+    <div class="result-box">
+        <h3>Ergebnis der Sortierung:</h3>
+        <p id="resultOutput"></p>
+    </div>
+</div>
+
+</body>
+</html>

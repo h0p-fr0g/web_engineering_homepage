@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Brackets Validation</title>
+
+    <style>
+        p#content{
+            border:2px solid;
+            padding: 5px;
+            min-height: 20px;
+        }
+        p#content:focus {
+            outline: none;
+            border-style: solid;
+        }
+    </style>
+    <script>
+
+        document.addEventListener('DOMContentLoaded', function() {
+
+            const content = document.getElementById('content');
+
+            const brackets = {
+                ')': '(', 
+                ']': '[', 
+                '}': '{',
+                '>': '<'
+            };
+
+            content.addEventListener('keyup', function(event) {
+
+                const text = content.textContent;
+                const isValid = checkBrackets(text, brackets);
+                console.assert(isValid, 'Error');
+
+                if (isValid) {
+                    content.style.borderColor = 'green';
+                    content.style.borderWidth = '2px';
+                } else {
+                    content.style.borderColor = 'red';
+                    content.style.borderWidth = '2px';
+                }
+            });
+
+        });
+
+ 
+        function checkBrackets(str, bracketMap) {
+            
+            const stack = [];
+            
+            const openBrackets = Object.values(bracketMap);
+            
+            const closeBrackets = Object.keys(bracketMap);
+
+            for (let i = 0; i < str.length; i++) {
+
+                const char = str[i];
+
+                if (openBrackets.includes(char)) {
+                    stack.push(char);
+                } 
+                else if (closeBrackets.includes(char)) {
+                    
+                    if (stack.length === 0) {
+                        return false;
+                    }
+                    
+                    const lastOpen = stack.pop();
+                    
+                    if (lastOpen !== bracketMap[char]) {
+                        return false;
+                    }
+                }
+            }
+
+            return stack.length === 0;
+        }
+
+    </script>
+
+</head>
+
+<body>
+
+ <p id="content" contenteditable="true"></p>
+
+
+</body>
+</html>
